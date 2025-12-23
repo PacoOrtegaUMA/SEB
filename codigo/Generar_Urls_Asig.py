@@ -2,22 +2,35 @@
 # -*- coding: utf-8 -*-
 
 import sys
-import re
 import requests
 from urllib.parse import urljoin, urlparse
 
+from bs4 import BeautifulSoup
+
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.common.exceptions import WebDriverException
 
 
 # ============================================================
-#  BROWSER (SEB STYLE)
+#  CONFIG
+# ============================================================
+
+CONTENT_PATHS = set([
+    "/mod/assign/view.php",
+    "/mod/page/view.php",
+    "/mod/folder/view.php",
+    "/mod/resource/view.php",
+    "/mod/url/view.php",
+])
+
+
+# ============================================================
+#  BROWSER (LOGIN)
 # ============================================================
 
 def create_driver():
-    # Try Firefox first
     try:
         fo = FirefoxOptions()
         fo.add_argument("--width=1600")
@@ -25,24 +38,19 @@ def create_driver():
         driver = webdriver.Firefox(options=fo)
         print("[+] Using Firefox (Selenium)")
         return driver
-    except WebDriverException as e:
-        print("[WARN] Could not start Firefox: %s" % getattr(e, "msg", "unknown error"))
     except Exception:
-        print("[WARN] Could not start Firefox (unknown error)")
+        pass
 
-    # If Firefox fails, try Chrome
     try:
         co = ChromeOptions()
         co.add_argument("--start-maximized")
         driver = webdriver.Chrome(options=co)
         print("[+] Using Chrome (Selenium)")
         return driver
-    except WebDriverException as e:
-        print("[WARN] Could not start Chrome: %s" % getattr(e, "msg", "unknown error"))
     except Exception:
-        print("[WARN] Could not start Chrome (unknown error)")
+        pass
 
-    print("[ERR] No browser available. Install Firefox or Chrome and their drivers.")
+    print("[ERR] No browser available")
     sys.exit(1)
 
 
@@ -52,199 +60,231 @@ def create_driver():
 
 def parse_args():
     if len(sys.argv) < 3:
-        print("USAGE: python Urls_Asig_Mix.py <domain> <course_id> [-fire]")
-        print("Example: python Urls_Asig_Mix.py mop 21232 -fire")
+        print("USAGE: python urls_seb.py <domain> <course_id>")
         sys.exit(1)
 
-    domain = sys.argv[1].lower()
+    base = "%s.cv.uma.es" % sys.argv[1].lower()
     course_id = sys.argv[2]
 
-    use_fire = False
+    print("[+] Domain:", base)
+    print("[+] Course id:", course_id)
 
-    for opt in sys.argv[3:]:
-        if opt == "-fire":
-            use_fire = True
-        else:
-            print("Unknown option:", opt)
-            print("Allowed options: -fire")
-            sys.exit(1)
-
-    base = "%s.cv.uma.es" % domain
-
-    print("[+] Domain: %s" % base)
-    print("[+] Course id: %s" % course_id)
-    print("[+] Assignments: ALWAYS enabled (assign index will be scanned)")
-    if use_fire:
-        print("[+] Option -fire: also adding FIRE fixed URLs (SSO, login, etc.)")
-    else:
-        print("[+] Without -fire: only SEB style URLs")
-
-    return base, course_id, use_fire
+    return base, course_id
 
 
 # ============================================================
-#  LOGIN WITH SELENIUM (SEB)
+#  LOGIN -> COOKIES
 # ============================================================
 
 def login_and_get_cookies(base, course_id):
-    login_url = "https://%s/course/view.php?id=%s" % (base, course_id)
+    url = "https://%s/course/view.php?id=%s" % (base, course_id)
 
-    print("\n[+] Opening browser for login ...")
-    print("[*] URL: %s" % login_url)
+    print("[+] Opening browser for login")
+    print("[+] URL:", url)
 
     driver = create_driver()
+    driver.get(url)
 
-    try:
-        driver.get(login_url)
-        input(
-            "\n>>> Do the full login in the browser window.\n"
-            ">>> When you can see the course page, press ENTER here <<<\n"
-        )
-        selenium_cookies = driver.get_cookies()
-    finally:
-        driver.quit()
+    input("\n>>> Do the full login and press ENTER here <<<\n")
 
     jar = requests.cookies.RequestsCookieJar()
-    count = 0
-    for c in selenium_cookies:
-        name = c.get("name")
-        value = c.get("value")
-        domain = c.get("domain") or base
-        path = c.get("path") or "/"
-        jar.set(name, value, domain=domain, path=path)
-        count += 1
+    for c in driver.get_cookies():
+        jar.set(
+            c["name"],
+            c["value"],
+            domain=c.get("domain") or base,
+            path=c.get("path") or "/"
+        )
 
-    print("[+] %d cookies captured from browser session" % count)
-    if count == 0:
-        print("[WARN] No cookies captured. Login probably failed.")
+    driver.quit()
+
+    print("[+] Cookies captured:", len(jar))
     return jar
 
 
 # ============================================================
-#  SCRAP UTILS (SEB STYLE URLS)
+#  HTML UTILS
 # ============================================================
 
 def fetch_html(url, cookies):
-    r = requests.get(url, cookies=cookies)
+    r = requests.get(url, cookies=cookies, timeout=20)
     r.raise_for_status()
     return r.text
 
 
 def extract_hrefs(html):
-    return re.findall(r'href=\"([^\"]+)\"', html)
+    soup = BeautifulSoup(html, "html.parser")
+    return [a["href"] for a in soup.find_all("a", href=True)]
 
 
-def filter_moodle_urls(hrefs, base_url):
-    patterns = [
-        "/mod/resource/view.php",
-        "/mod/folder/view.php",
-        "/mod/url/view.php",
-        "/mod/assign/view.php",
-        "/mod/page/view.php",
-        "/pluginfile.php",
-    ]
+def seb_format(url):
+    url = url.split("#", 1)[0]
+    p = urlparse(url)
+    if not p.netloc or not p.path:
+        return None
 
-    urls = set()
+    out = "*://%s%s" % (p.netloc, p.path)
+    if p.query:
+        out += "?%s" % p.query
+    return out + "*"
+
+
+# ============================================================
+#  FIXED URLS
+# ============================================================
+
+def generar_urls_fijas_seb(base, course_id):
+    print("[+] Adding fixed SEB URLs")
+
+    return set([
+        "*://%s/course/view.php?id=%s*" % (base, course_id),
+        "*://%s/course/resources.php?id=%s*" % (base, course_id),
+        "*://%s/pluginfile.php/*" % base,
+        "*://%s/mod/assign/view.php*" % base,
+        "*://%s/mod/assign/index.php?id=%s*" % (base, course_id),
+    ])
+
+
+# ============================================================
+#  STEP 1: COLLECT ACTIVITY PAGES
+# ============================================================
+
+def collect_activities(hrefs, base_url, base_host):
+    activities = set()
+    modurls = set()
 
     for h in hrefs:
         abs_url = urljoin(base_url, h)
         p = urlparse(abs_url)
-        clean = "*://%s%s" % (p.netloc, p.path)
-        if p.query:
-            clean += "?%s" % p.query
 
-        for patt in patterns:
-            if patt in clean:
-                urls.add(clean + "*")
-                break
+        if p.netloc != base_host:
+            continue
+        if p.path not in CONTENT_PATHS:
+            continue
 
-    return urls
+        activities.add(abs_url)
+        if p.path == "/mod/url/view.php":
+            modurls.add(abs_url)
 
-
-# ============================================================
-#  FIXED SEB URLS (ALWAYS INCLUDE ASSIGNMENTS)
-# ============================================================
-
-def generar_urls_fijas_seb(base, course_id):
-    esenciales = [
-        "*://%s/course/view.php?id=%s*" % (base, course_id),
-        "*://%s/course/resources.php?id=%s*" % (base, course_id),
-        "*://%s/pluginfile.php/*" % base,               # View PDFs, etc.
-        "*://%s/mod/assign/view.php*" % base,           # Submit assignments (POST + query)
-        "*://%s/mod/assign/index.php?id=%s*" % (base, course_id),  # Assignment index
-    ]
-    return set(esenciales)
+    return activities, modurls
 
 
 # ============================================================
-#  FIXED FIRE URLS (ONLY IF -fire)
+#  STEP 2: EXTERNALS
 # ============================================================
 
-def generar_urls_fijas_fire(base, course_id):
-    esenciales = [
-        "*://%s/course/view.php?id=%s*" % (base, course_id),
-        "*://%s/course/resources.php?id=%s*" % (base, course_id),
-        "*://%s/mod/assign/index.php?id=%s*" % (base, course_id),
-    ]
+def resolve_external_from_modurl(modurl, cookies, base_host):
+    # 1) Try redirects
+    try:
+        r = requests.get(modurl, cookies=cookies, allow_redirects=True, timeout=20)
+        final = (r.url or "").split("#", 1)[0]
+        if urlparse(final).netloc and urlparse(final).netloc != base_host:
+            return final
+    except Exception:
+        pass
 
-    comunes = [
-        "*://idpbridge.cv.uma.es/*",
-        "*://idp.uma.es/*",
-        "*://sso.uma.es/*",
-        "*://login.uma.es/*",
-        "*://autenticacion.uma.es/*",
-        "*://auth.uma.es/*",
-        "*://shibboleth.uma.es/*",
-        "*://%s/login/*" % base,
-        "*://%s/theme/*" % base,
-        "*://%s/lib/*" % base,
-        "*://%s/pluginfile.php/*" % base,
-        "*://%s/auth/*" % base,
-        "*://%s/simplesaml/*" % base,
-        "*://%s/course/switchrole.php*" % base,
-        "*://%s/mod/assign/view.php" % base,
-    ]
+    # 2) If no redirect, parse HTML and look for external link in main content
+    try:
+        html = fetch_html(modurl, cookies)
+        soup = BeautifulSoup(html, "html.parser")
+        main = soup.select_one("#region-main") or soup
 
-    return set(esenciales + comunes)
+        for a in main.find_all("a", href=True):
+            abs2 = urljoin(modurl, a["href"])
+            p2 = urlparse(abs2)
+            if p2.scheme in ("http", "https") and p2.netloc and p2.netloc != base_host:
+                return abs2.split("#", 1)[0]
+    except Exception:
+        pass
+
+    return None
+
+
+
+def extract_external_from_activity(activity_url, cookies, base_host):
+    externals = set()
+    html = fetch_html(activity_url, cookies)
+    soup = BeautifulSoup(html, "html.parser")
+
+    main = soup.select_one("#region-main") or soup
+
+    for a in main.find_all("a", href=True):
+        abs2 = urljoin(activity_url, a["href"])
+        p = urlparse(abs2)
+        if p.scheme in ("http", "https") and p.netloc != base_host:
+            externals.add(abs2)
+
+    return externals
 
 
 # ============================================================
-#  SCRAP COURSE (ALWAYS SCAN ASSIGN INDEX)
+#  SCRAPE COURSE
 # ============================================================
 
 def scrape_course(base, course_id, cookies):
     base_url = "https://%s" % base
+    base_host = base
 
-    pages = [
+    seed_pages = [
         "%s/course/view.php?id=%s" % (base_url, course_id),
         "%s/course/resources.php?id=%s" % (base_url, course_id),
         "%s/mod/assign/index.php?id=%s" % (base_url, course_id),
     ]
 
-    urls = set()
+    activities = set()
+    modurls = set()
+    externals = set()
 
-    for p in pages:
-        try:
-            html = fetch_html(p, cookies)
-            hrefs = extract_hrefs(html)
-            urls.update(filter_moodle_urls(hrefs, base_url))
-            print("[OK] Analysed: %s" % p)
-        except Exception as e:
-            print("[ERR] Could not access %s: %s" % (p, e))
+    print("[+] Scanning course index pages")
 
-    return urls
+    for p in seed_pages:
+        html = fetch_html(p, cookies)
+        hrefs = extract_hrefs(html)
+        a, m = collect_activities(hrefs, base_url, base_host)
+        activities.update(a)
+        modurls.update(m)
+
+    print("[+] Activities found:", len(activities))
+    print("[+] URL activities found:", len(modurls))
+
+    # SOLO: externas desde mod/url
+    for mu in modurls:
+        ext = resolve_external_from_modurl(mu, cookies, base_host)
+        if ext:
+            externals.add(ext)
+
+    print("[+] External URLs from mod/url:", len(externals))
+
+    return activities, externals
+
 
 
 # ============================================================
-#  SAVE FILE (SEB FORMAT, NO QUOTES, NO COMMAS)
+#  SAVE
 # ============================================================
 
-def save_lines(lines, course_id):
+def save_all(activities, externals, base, course_id):
+    out = set()
+
+    out.update(generar_urls_fijas_seb(base, course_id))
+
+    for u in activities:
+        p = seb_format(u)
+        if p:
+            out.add(p)
+
+    for u in externals:
+        p = seb_format(u)
+        if p:
+            out.add(p)
+
     name = "URLs_%s.txt" % course_id
     with open(name, "w") as f:
-        for line in sorted(lines):
-            f.write("%s\n" % line)
-    print("\n[+] Saved to %s" % name)
+        for u in sorted(out):
+            f.write(u + "\n")
+
+    print("[+] Saved file:", name)
+    print("[+] Total URLs written:", len(out))
 
 
 # ============================================================
@@ -252,20 +292,10 @@ def save_lines(lines, course_id):
 # ============================================================
 
 def main():
-    base, course_id, use_fire = parse_args()
-
+    base, course_id = parse_args()
     cookies = login_and_get_cookies(base, course_id)
-
-    urls_fijas_seb = generar_urls_fijas_seb(base, course_id)
-    urls_scrap = scrape_course(base, course_id, cookies)
-
-    all_urls = urls_fijas_seb.union(urls_scrap)
-
-    if use_fire:
-        urls_fire = generar_urls_fijas_fire(base, course_id)
-        all_urls = all_urls.union(urls_fire)
-
-    save_lines(all_urls, course_id)
+    activities, externals = scrape_course(base, course_id, cookies)
+    save_all(activities, externals, base, course_id)
 
 
 if __name__ == "__main__":
