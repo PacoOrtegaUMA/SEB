@@ -4,7 +4,7 @@ REM Maximizar Esta Ventana y Continuar
 REM ==============================
 setlocal
 
-REM Si no tiene el marcador MAX, relanzar maximizado y CERRAR la original
+REM Si no tiene el marcador MAX, relanzar maximizado
 if "%1" NEQ "MAX" (
     start "" /MAX "%~f0" MAX
     exit /b
@@ -52,11 +52,12 @@ if exist "%KEY%" (
     del /f /q "%KEY%"
 )
 
-REM ==============================
-REM Auto-eliminacion y Cierre Limpio
-REM ==============================
-echo Limpiando rastro y saliendo...
+REM ======================================================
+REM PAUSA Y CIERRE (Aquí es donde ves los resultados)
+REM ======================================================
+echo.
+echo Proceso finalizado. Pulsa una tecla para borrar este script y salir.
+pause >nul
 
-REM El truco (goto) 2>nul libera el archivo para que pueda ser borrado 
-REM mientras cmd.exe ejecuta el comando independiente de borrado.
+REM El truco (goto) libera el script justo antes de borrarlo para evitar errores
 (goto) 2>nul & start /b "" cmd /c "del /f /q "%THISBAT%"" & exit /b %EXITCODE%
