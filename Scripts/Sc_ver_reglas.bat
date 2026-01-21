@@ -1,4 +1,11 @@
 @echo off
+
+REM Si no está maximizado, reiniciar con ventana maximizada
+if "%1" NEQ "max" (
+    start "" /MAX "%~f0" max
+    exit /b
+)
+
 rem Ver reglas de la cadena OUTPUT en la VM
 
 set HOST=localhost
