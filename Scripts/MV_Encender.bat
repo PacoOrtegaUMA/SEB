@@ -17,3 +17,6 @@ echo Este script se auto-eliminara ahora.
 
 REM Trucazo: lanzar otro cmd que borre este .bat cuando termine
 start "" /min cmd /c del "%~f0"
+
+REM Cerrar este cmd
+exit /b
