@@ -4,10 +4,10 @@ REM Maximizar Esta Ventana y Continuar
 REM ==============================
 setlocal
 
-REM Si no tiene el marcador MAX, relanzar maximizado
+REM Si no tiene el marcador MAX, relanzar maximizado y CERRAR la original
 if "%1" NEQ "MAX" (
     start "" /MAX "%~f0" MAX
-    exit
+    exit /b
 )
 
 REM ==============================
@@ -45,25 +45,18 @@ echo EXITCODE SSH: %EXITCODE%
 echo.
 
 REM ==============================
-REM Borrar clave
+REM Borrar clave privada
 REM ==============================
-echo Borrando clave privada...
-del /f /q "%KEY%"
+if exist "%KEY%" (
+    echo Borrando clave privada...
+    del /f /q "%KEY%"
+)
 
 REM ==============================
-REM Autoeliminar este script
+REM Auto-eliminacion y Cierre Limpio
 REM ==============================
-echo Programando autoeliminado...
-start "" /min cmd /c "ping 127.0.0.1 -n 2 >nul & del "%THISBAT%""
+echo Limpiando rastro y saliendo...
 
-REM ==============================
-REM Pausa para ver salida
-REM ==============================
-echo.
-echo Pulsa una tecla para cerrar...
-pause >nul
-
-REM ==============================
-REM FIN
-REM ==============================
-exit /b %EXITCODE%
+REM El truco (goto) 2>nul libera el archivo para que pueda ser borrado 
+REM mientras cmd.exe ejecuta el comando independiente de borrado.
+(goto) 2>nul & start /b "" cmd /c "del /f /q "%THISBAT%"" & exit /b %EXITCODE%
