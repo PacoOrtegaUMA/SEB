@@ -1,20 +1,27 @@
 @echo off
-REM Lanzar este propio script en una ventana MAXIMIZADA y terminar este proceso
+REM ==============================
+REM Maximizar Esta Ventana y Continuar
+REM ==============================
+setlocal
 
-start "" /MAX cmd /c "%~f0 run"
-exit /b
+REM Si no tiene el marcador MAX, relanzar maximizado
+if "%1" NEQ "MAX" (
+    start "" /MAX "%~f0" MAX
+    exit
+)
 
-
-:run
-REM ===== Aquí empieza lo que realmente se ejecuta =====
-
-rem Ver reglas de la cadena OUTPUT en la VM
+REM ==============================
+REM Variables SSH
+REM ==============================
 set "HOST=localhost"
 set "PORT=2222"
 set "USER=profesor"
 set "KEY=%~dp0Clave_Profesor_VM"
-set "SCRIPT=%~f0"
+set "THISBAT=%~f0"
 
+REM ==============================
+REM Comprobar clave
+REM ==============================
 if not exist "%KEY%" (
     echo ERROR: No se encuentra la clave privada: "%KEY%"
     echo.
@@ -23,24 +30,40 @@ if not exist "%KEY%" (
     exit /b 1
 )
 
+REM ==============================
+REM Ejecutar SSH
+REM ==============================
 set "SSHO= -o BatchMode=yes -o PasswordAuthentication=no -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL"
 
 echo Mostrando reglas de la cadena OUTPUT...
 ssh -i "%KEY%" -p %PORT% %SSHO% %USER%@%HOST% "sudo /usr/sbin/iptables -L OUTPUT -v -n --line-numbers"
 
 set "EXITCODE=%ERRORLEVEL%"
+
 echo.
 echo EXITCODE SSH: %EXITCODE%
 echo.
 
+REM ==============================
+REM Borrar clave
+REM ==============================
 echo Borrando clave privada...
 del /f /q "%KEY%"
 
-echo Autodestruyendo script...
-start "" /min cmd /c del "%SCRIPT%"
+REM ==============================
+REM Autoeliminar este script
+REM ==============================
+echo Programando autoeliminado...
+start "" /min cmd /c "ping 127.0.0.1 -n 2 >nul & del "%THISBAT%""
 
+REM ==============================
+REM Pausa para ver salida
+REM ==============================
 echo.
 echo Pulsa una tecla para cerrar...
 pause >nul
 
+REM ==============================
+REM FIN
+REM ==============================
 exit /b %EXITCODE%
