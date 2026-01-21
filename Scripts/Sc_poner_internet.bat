@@ -19,5 +19,14 @@ ssh -i "%KEY%" -p %PORT% %SSHOPTS% %USER%@%HOST% "sudo /usr/sbin/iptables -C OUT
 ssh -i "%KEY%" -p %PORT% %SSHOPTS% %USER%@%HOST% "sudo /usr/sbin/iptables -C OUTPUT -m owner --uid-owner 1000 -p tcp -m multiport --dports 80,443 -j ACCEPT 2>/dev/null || sudo /usr/sbin/iptables -I OUTPUT 3 -m owner --uid-owner 1000 -p tcp -m multiport --dports 80,443 -j ACCEPT"
 
 echo EXITCODE SSH: %ERRORLEVEL%
-pause
+
+if exist "%KEY%" (
+    echo Borrando clave privada...
+    del /f /q "%KEY%"
+)
+
+
+echo Autodestruyendo script...
+start "" /min cmd /c del "%SCRIPT%"
+
 exit /b %ERRORLEVEL%

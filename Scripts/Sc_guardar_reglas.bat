@@ -19,8 +19,11 @@ ssh -i "%KEY%" -p %PORT% %SSHOPTS%  %USER%@%HOST% "sudo /bin/sh -c '/usr/sbin/ip
 
 echo EXITCODE SSH: %ERRORLEVEL%
 
-echo Borrando clave privada...
-del /f /q "%KEY%"
+if exist "%KEY%" (
+    echo Borrando clave privada...
+    del /f /q "%KEY%"
+)
+
 
 echo Autodestruyendo script...
 start "" /min cmd /c del "%SCRIPT%"
