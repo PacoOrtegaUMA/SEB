@@ -1,4 +1,4 @@
-📘 Descripción del Proyecto
+**Descripción del Proyecto**
 
 Este repositorio contiene materiales, scripts y documentación para la configuración y gestión de exámenes seguros mediante Safe Exam Browser (SEB) y máquinas virtuales (VirtualBox) en el Campus Virtual de la Universidad de Málaga.
 
@@ -14,7 +14,7 @@ Incluye:
 - Control de conectividad en máquinas virtuales.
 - Recomendaciones de seguridad y buenas prácticas.
 
-🔐 Niveles de Seguridad
+**Niveles de Seguridad**
 
 El sistema contempla cuatro niveles progresivos:
 
@@ -30,7 +30,7 @@ Uso de máquinas virtuales sin conectividad externa para exámenes técnicos.
 Nivel 4 – Entorno con Internet controlado
 Acceso limitado a servicios específicos bajo supervisión estricta.
 
-🛠️ Herramientas Incluidas
+**Herramientas Incluidas**
 
 Generar_Urls_Asig.py
 Extrae automáticamente las URLs de una asignatura del Campus Virtual.
@@ -44,7 +44,7 @@ Permiten habilitar o bloquear el acceso a Internet en máquinas virtuales.
 Scripts de configuración de VirtualBox
 Refuerzan el aislamiento del entorno de examen.
 
-🎯 Objetivo
+**Objetivo**
 
 El objetivo principal de este proyecto es:
 
@@ -52,7 +52,7 @@ Facilitar la creación de entornos de evaluación seguros, flexibles y fiables, 
 
 Está especialmente orientado a exámenes técnicos que requieren el uso de herramientas informáticas, programación, redes o entornos virtualizados.
 
-👤 Autor
+**Autor**
 
 Francisco Ortega Zamorano
 Departamento de Lenguajes y Ciencias de la Computación
