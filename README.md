@@ -6,19 +6,13 @@ El proyecto proporciona un marco completo para crear entornos de evaluación con
 
 Incluye:
 
-Guía detallada de configuración de SEB.
-
-Diferentes niveles de seguridad para exámenes.
-
-Scripts para automatizar tareas.
-
-Herramientas para generación de URLs permitidas.
-
-Automatización de configuraciones SEB.
-
-Control de conectividad en máquinas virtuales.
-
-Recomendaciones de seguridad y buenas prácticas.
+- Guía detallada de configuración de SEB.
+- Diferentes niveles de seguridad para exámenes.
+- Scripts para automatizar tareas.
+- Herramientas para generación de URLs permitidas.
+- Automatización de configuraciones SEB.
+- Control de conectividad en máquinas virtuales.
+- Recomendaciones de seguridad y buenas prácticas.
 
 🔐 Niveles de Seguridad
 
