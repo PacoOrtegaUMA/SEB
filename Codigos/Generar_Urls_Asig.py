@@ -2,301 +2,131 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import time
 import requests
 from urllib.parse import urljoin, urlparse
-
 from bs4 import BeautifulSoup
-
 from selenium import webdriver
-from selenium.webdriver.firefox.options import Options as FirefoxOptions
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.common.exceptions import WebDriverException
-
+from selenium.webdriver.common.by import By
 
 # ============================================================
-#  CONFIG
+#  RESOLUCIÓN DE SALTOS (EXTERNAS)
 # ============================================================
 
-CONTENT_PATHS = set([
-    "/mod/assign/view.php",
-    "/mod/page/view.php",
-    "/mod/folder/view.php",
-    "/mod/resource/view.php",
-    "/mod/url/view.php",
-])
-
-
-# ============================================================
-#  BROWSER (LOGIN)
-# ============================================================
-
-def create_driver():
+def resolver_url_final(url_moodle, cookies):
+    """Entra en Moodle y persigue el enlace hasta la web externa."""
     try:
-        fo = FirefoxOptions()
-        fo.add_argument("--width=1600")
-        fo.add_argument("--height=900")
-        driver = webdriver.Firefox(options=fo)
-        print("[+] Using Firefox (Selenium)")
-        return driver
-    except Exception:
-        pass
-
-    try:
-        co = ChromeOptions()
-        co.add_argument("--start-maximized")
-        driver = webdriver.Chrome(options=co)
-        print("[+] Using Chrome (Selenium)")
-        return driver
-    except Exception:
-        pass
-
-    print("[ERR] No browser available")
-    sys.exit(1)
-
+        r = requests.get(url_moodle, cookies=cookies, timeout=10, allow_redirects=True)
+        if "uma.es" not in r.url:
+            return r.url
+        soup = BeautifulSoup(r.text, "html.parser")
+        link_respaldo = soup.select_one(".urlworkaround a") or soup.select_one("#region-main a")
+        if link_respaldo and link_respaldo.has_attr('href'):
+            return link_respaldo['href']
+        return r.url
+    except:
+        return url_moodle
 
 # ============================================================
-#  ARGUMENTS
+#  ESCANEADOR
 # ============================================================
 
-def parse_args():
-    if len(sys.argv) < 3:
-        print("USAGE: python urls_seb.py <domain> <course_id>")
-        sys.exit(1)
+def ejecutar_escaneo(subdominio, course_id):
+    base_host = f"{subdominio}.cv.uma.es"
+    main_url = f"https://{base_host}/course/view.php?id={course_id}"
 
-    base = "%s.cv.uma.es" % sys.argv[1].lower()
-    course_id = sys.argv[2]
-
-    print("[+] Domain:", base)
-    print("[+] Course id:", course_id)
-
-    return base, course_id
-
-
-# ============================================================
-#  LOGIN -> COOKIES
-# ============================================================
-
-def login_and_get_cookies(base, course_id):
-    url = "https://%s/course/view.php?id=%s" % (base, course_id)
-
-    print("[+] Opening browser for login")
-    print("[+] URL:", url)
-
-    driver = create_driver()
-    driver.get(url)
-
-    input("\n>>> Do the full login and press ENTER here <<<\n")
+    driver = webdriver.Firefox()
+    driver.get(main_url)
+    print(f"\n[*] Navegador en: {main_url}")
+    input(">>> LOGUEATE Y PULSA ENTER CUANDO VEAS LAS PESTAÑAS DEL CURSO <<<\n")
 
     jar = requests.cookies.RequestsCookieJar()
     for c in driver.get_cookies():
-        jar.set(
-            c["name"],
-            c["value"],
-            domain=c.get("domain") or base,
-            path=c.get("path") or "/"
-        )
+        jar.set(c["name"], c["value"], domain=c.get("domain") or base_host)
+
+    tabs = driver.find_elements(By.CSS_SELECTOR, "a[href*='section=']")
+    tab_urls = list(set([t.get_attribute("href") for t in tabs]))
+    tab_urls.append(main_url)
+
+    urls_encontradas = set()
+    basura = ['edit', 'delete', 'sesskey', 'admin', 'move', 'hide', 'duplicate']
+
+    for url in tab_urls:
+        print(f"[*] Escaneando sección: {url}")
+        driver.get(url)
+        time.sleep(2)
+
+        soup = BeautifulSoup(driver.page_source, "html.parser")
+        container = soup.select_one(".course-content") or soup.select_one(".content")
+        
+        if container:
+            for a in container.find_all("a", href=True):
+                href = urljoin(url, a['href'])
+                
+                if any(x in href for x in basura) or href.startswith("#"):
+                    continue
+
+                # SI ES UN RECURSO TIPO URL -> GUARDAMOS EL SALTO Y LA EXTERNA
+                if "/mod/url/view.php" in href:
+                    print(f"    [>] Recurso URL detectado: {href}")
+                    # 1. Guardamos la de Moodle (el salto)
+                    urls_encontradas.add(href)
+                    
+                    # 2. Investigamos y guardamos la de destino (la externa)
+                    final = resolver_url_final(href, jar)
+                    if final != href:
+                        print(f"        [+] Destino resuelto: {final}")
+                        urls_encontradas.add(final)
+                
+                # RECURSOS INTERNOS (PDF, Tareas, etc.)
+                elif any(x in href for x in ["/mod/resource/", "/mod/folder/", "/mod/assign/"]):
+                    urls_encontradas.add(href)
+                
+                # ENLACES EXTERNOS DIRECTOS
+                elif "uma.es" not in href and len(href) > 10:
+                    urls_encontradas.add(href)
 
     driver.quit()
-
-    print("[+] Cookies captured:", len(jar))
-    return jar
-
+    return urls_encontradas
 
 # ============================================================
-#  HTML UTILS
-# ============================================================
-
-def fetch_html(url, cookies):
-    r = requests.get(url, cookies=cookies, timeout=20)
-    r.raise_for_status()
-    return r.text
-
-
-def extract_hrefs(html):
-    soup = BeautifulSoup(html, "html.parser")
-    return [a["href"] for a in soup.find_all("a", href=True)]
-
-
-def seb_format(url):
-    url = url.split("#", 1)[0]
-    p = urlparse(url)
-    if not p.netloc or not p.path:
-        return None
-
-    out = "*://%s%s" % (p.netloc, p.path)
-    if p.query:
-        out += "?%s" % p.query
-    return out + "*"
-
-
-# ============================================================
-#  FIXED URLS
-# ============================================================
-
-def generar_urls_fijas_seb(base, course_id):
-    print("[+] Adding fixed SEB URLs")
-
-    return set([
-        "*://%s/course/view.php?id=%s*" % (base, course_id),
-        "*://%s/course/resources.php?id=%s*" % (base, course_id),
-        "*://%s/pluginfile.php/*" % base,
-        "*://%s/mod/assign/view.php*" % base,
-        "*://%s/mod/assign/index.php?id=%s*" % (base, course_id),
-    ])
-
-
-# ============================================================
-#  STEP 1: COLLECT ACTIVITY PAGES
-# ============================================================
-
-def collect_activities(hrefs, base_url, base_host):
-    activities = set()
-    modurls = set()
-
-    for h in hrefs:
-        abs_url = urljoin(base_url, h)
-        p = urlparse(abs_url)
-
-        if p.netloc != base_host:
-            continue
-        if p.path not in CONTENT_PATHS:
-            continue
-
-        activities.add(abs_url)
-        if p.path == "/mod/url/view.php":
-            modurls.add(abs_url)
-
-    return activities, modurls
-
-
-# ============================================================
-#  STEP 2: EXTERNALS
-# ============================================================
-
-def resolve_external_from_modurl(modurl, cookies, base_host):
-    # 1) Try redirects
-    try:
-        r = requests.get(modurl, cookies=cookies, allow_redirects=True, timeout=20)
-        final = (r.url or "").split("#", 1)[0]
-        if urlparse(final).netloc and urlparse(final).netloc != base_host:
-            return final
-    except Exception:
-        pass
-
-    # 2) If no redirect, parse HTML and look for external link in main content
-    try:
-        html = fetch_html(modurl, cookies)
-        soup = BeautifulSoup(html, "html.parser")
-        main = soup.select_one("#region-main") or soup
-
-        for a in main.find_all("a", href=True):
-            abs2 = urljoin(modurl, a["href"])
-            p2 = urlparse(abs2)
-            if p2.scheme in ("http", "https") and p2.netloc and p2.netloc != base_host:
-                return abs2.split("#", 1)[0]
-    except Exception:
-        pass
-
-    return None
-
-
-
-def extract_external_from_activity(activity_url, cookies, base_host):
-    externals = set()
-    html = fetch_html(activity_url, cookies)
-    soup = BeautifulSoup(html, "html.parser")
-
-    main = soup.select_one("#region-main") or soup
-
-    for a in main.find_all("a", href=True):
-        abs2 = urljoin(activity_url, a["href"])
-        p = urlparse(abs2)
-        if p.scheme in ("http", "https") and p.netloc != base_host:
-            externals.add(abs2)
-
-    return externals
-
-
-# ============================================================
-#  SCRAPE COURSE
-# ============================================================
-
-def scrape_course(base, course_id, cookies):
-    base_url = "https://%s" % base
-    base_host = base
-
-    seed_pages = [
-        "%s/course/view.php?id=%s" % (base_url, course_id),
-        "%s/course/resources.php?id=%s" % (base_url, course_id),
-        "%s/mod/assign/index.php?id=%s" % (base_url, course_id),
-    ]
-
-    activities = set()
-    modurls = set()
-    externals = set()
-
-    print("[+] Scanning course index pages")
-
-    for p in seed_pages:
-        html = fetch_html(p, cookies)
-        hrefs = extract_hrefs(html)
-        a, m = collect_activities(hrefs, base_url, base_host)
-        activities.update(a)
-        modurls.update(m)
-
-    print("[+] Activities found:", len(activities))
-    print("[+] URL activities found:", len(modurls))
-
-    # SOLO: externas desde mod/url
-    for mu in modurls:
-        ext = resolve_external_from_modurl(mu, cookies, base_host)
-        if ext:
-            externals.add(ext)
-
-    print("[+] External URLs from mod/url:", len(externals))
-
-    return activities, externals
-
-
-
-# ============================================================
-#  SAVE
-# ============================================================
-
-def save_all(activities, externals, base, course_id):
-    out = set()
-
-    out.update(generar_urls_fijas_seb(base, course_id))
-
-    for u in activities:
-        p = seb_format(u)
-        if p:
-            out.add(p)
-
-    for u in externals:
-        p = seb_format(u)
-        if p:
-            out.add(p)
-
-    name = "URLs_%s.txt" % course_id
-    with open(name, "w") as f:
-        for u in sorted(out):
-            f.write(u + "\n")
-
-    print("[+] Saved file:", name)
-    print("[+] Total URLs written:", len(out))
-
-
-# ============================================================
-#  MAIN
+#  FORMATEO Y GUARDADO
 # ============================================================
 
 def main():
-    base, course_id = parse_args()
-    cookies = login_and_get_cookies(base, course_id)
-    activities, externals = scrape_course(base, course_id, cookies)
-    save_all(activities, externals, base, course_id)
+    if len(sys.argv) < 3: return
+    sub = sys.argv[1].lower()
+    c_id = sys.argv[2]
+    base = f"{sub}.cv.uma.es"
 
+    urls_raw = ejecutar_escaneo(sub, c_id)
+
+    final_rules = {
+        f"*://{base}/pluginfile.php/*",
+        f"*://{base}/course/view.php?id={c_id}*",
+        f"*://{base}/mod/assign/view.php* "
+    }
+
+    for u in urls_raw:
+        u_clean = u.split("#")[0]
+        p = urlparse(u_clean)
+        
+        if p.netloc:
+            regla = f"*://{p.netloc}{p.path}"
+            if p.query:
+                regla += f"?{p.query}"
+            
+            if not regla.endswith("*"):
+                regla += "*"
+            
+            final_rules.add(regla)
+
+    with open(f"URLs_{c_id}.txt", "w", encoding="utf-8") as f:
+        for r in sorted(list(final_rules)):
+            f.write(r + "\n")
+
+    print(f"\n[OK] Archivo generado: URLS_TODO_{c_id}.txt")
+    print(f"[*] Ahora tienes tanto los enlaces /mod/url/ como las externas finales.")
 
 if __name__ == "__main__":
     main()
