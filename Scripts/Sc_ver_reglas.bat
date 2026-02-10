@@ -60,4 +60,5 @@ echo Proceso finalizado. Pulsa una tecla para borrar este script y salir.
 pause >nul
 
 REM El truco (goto) libera el script justo antes de borrarlo para evitar errores
-(goto) 2>nul & start /b "" cmd /c "del /f /q "%THISBAT%"" & exit /b %EXITCODE%
+
+(goto) 2>nul & start /b "" cmd /c del /f /q "%THISBAT%" & exit /b %EXITCODE%
