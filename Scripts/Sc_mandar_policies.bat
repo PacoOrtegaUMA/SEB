@@ -32,7 +32,7 @@ set SSHOPTS= -o BatchMode=yes -o PasswordAuthentication=no -o IdentitiesOnly=yes
 
 
 echo Subiendo policies.json a la VM...
-scp -i "%KEY%" -P %PORT% "%LOCAL_JSON%" %USER%@%HOST%:%REMOTE_FILE%
+scp -i "%KEY%" -P %PORT% %SSHOPTS% "%LOCAL_JSON%" %USER%@%HOST%:%REMOTE_FILE%
 if errorlevel 1 (
     echo ERROR al copiar policies.json con scp
     pause
