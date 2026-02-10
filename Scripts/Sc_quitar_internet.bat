@@ -30,7 +30,6 @@ if exist "%KEY%" (
 
 
 echo Autodestruyendo script...
-start "" /min cmd /c del "%SCRIPT%"
+start /b "" cmd /c del /f /q "%~f0" & exit
 
-exit /b %ERRORLEVEL%
 
