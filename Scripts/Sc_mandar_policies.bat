@@ -59,9 +59,5 @@ if exist "%LOCAL_JSON%" (
     del /f /q "%LOCAL_JSON%"
 )
 
-
 echo Autodestruyendo script...
-start "" /min cmd /c del "%~f0"
-
-
-exit /b %ERRORLEVEL%
+start /b "" cmd /c del /f /q "%~f0" & exit
