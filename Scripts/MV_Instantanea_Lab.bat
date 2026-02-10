@@ -6,7 +6,7 @@ if "%~1"=="" (
     pause
     exit /b 1
 )
-set "VM=%~1"
+set "VM_NAME=%~1"
 set "SNAP_NAME=InicioCurso"
 set "VBOXM=C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
 
@@ -20,3 +20,4 @@ REM ===== Restaurar snapshot =====
 "%VBOXM%" snapshot "%VM_NAME%" restore "%SNAP_NAME%" >nul 2>&1
 
 exit
+
