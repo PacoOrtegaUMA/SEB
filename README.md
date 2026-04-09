@@ -7,6 +7,7 @@ El proyecto proporciona un marco completo para crear entornos de evaluación con
 Incluye:
 
 - Guía detallada de configuración de SEB.
+- Un archivo de configuración básico "ConfBasic.seb" (Suficiente si no precisa de URLs adicionales)
 - Diferentes niveles de seguridad para exámenes.
 - Scripts para automatizar tareas.
 - Herramientas para generación de URLs permitidas.
