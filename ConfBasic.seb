@@ -584,11 +584,11 @@
         <key>os</key>
         <integer>1</integer>
         <key>title</key>
-        <string>MV_BloqueoBarras</string>
+        <string>MV_BloqueoBarras_Lab</string>
         <key>description</key>
         <string />
         <key>executable</key>
-        <string>mv_bloqueobarras.bat</string>
+        <string>mv_bloqueobarras_lab.bat</string>
         <key>originalName</key>
         <string />
         <key>windowHandlingProcess</key>
@@ -625,11 +625,11 @@
         <key>os</key>
         <integer>1</integer>
         <key>title</key>
-        <string>MV_Borrar_Descargas</string>
+        <string>MV_Borrar_Descargas_Lab</string>
         <key>description</key>
         <string />
         <key>executable</key>
-        <string>mv_borrar_descargas.bat</string>
+        <string>mv_borrar_descargas_lab.bat</string>
         <key>originalName</key>
         <string />
         <key>windowHandlingProcess</key>
